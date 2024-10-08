@@ -1,0 +1,6 @@
+{
+    "metrics-addr": "docker-host.local:9323",
+    "experimental": true,
+    "dns": ["8.8.8.8", "8.8.4.4"]
+  }
+  

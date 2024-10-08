@@ -1,0 +1,68 @@
+# Global configuration
+global:
+  scrape_interval: 15s  # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate alerting rules
+  # Add other global settings here
+
+# Alerting rules configuration (if needed)
+rule_files:
+  - alerting_rules.yml
+
+# Alert-manager configuration (if needed) to set manual alarm/triggers.
+alerting:
+  alertmanagers:
+    - static_configs:
+      - targets:
+        - 'alertmanager:9093'
+
+# Scrape configurations for service targets
+scrape_configs:
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['pushgateway:9091']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']  # Prometheus server itself
+
+  - job_name: 'docker-daemon'
+    static_configs:
+      - targets: ['docker-host.local:9323']
+
+  - job_name: 'docker-swarm'
+    dockerswarm_sd_configs:
+      - host: 'unix:///var/run/docker.sock'
+        role: 'tasks'
+    relabel_configs:
+      - source_labels: [__meta_dockerswarm_service_name]
+        target_label: 'service'
+
+  - job_name: 'cadvisor'
+    static_configs:
+    - targets: ['cadvisor:8080']
+
+  - job_name: 'node_exporter'
+    static_configs:
+    - targets: ['node_exporter:9100']
+
+  - job_name: 'blackbox_exporter'
+    static_configs:
+    - targets: ['blackbox_exporter:9100']
+
+  - job_name: 'disk_metrics'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    relabel_configs:
+      - source_labels: ['__name__']
+        regex: 'node_disk_io_time_seconds_total'
+        target_label: 'device'
+
+  # Add more scrape configurations for other services as needed
+
+# Optional additional configurations:
+# - Add custom scrape_configs for other services or applications
+# - Configure service discovery (e.g., Kubernetes service discovery)
+# - Set retention policies and storage configurations
+# - Define alerting rules (in a separate file) and reference them in rule_files
+# - Configure Alertmanager for handling alerts
+

@@ -1,0 +1,117 @@
+version: "3.8"
+
+volumes:
+  prom_data:
+
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    # deprecated 
+    devices:
+      - "/dev/kmsg:/dev/kmsg"  # To get kernel logs (optional)
+    privileged: true  # deprecated 
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    # ports:
+    #   - "8080:8080"
+    networks:
+      - monitoring
+  
+  # Time-Series DB
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./conf/prometheus/:/etc/prometheus/:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    # ports:
+    #   - "9090:9090"
+    depends_on:
+      - cadvisor
+      - node_exporter
+    networks:
+      - monitoring
+  
+  # support for prometheus
+  pushgateway:
+    image: prom/pushgateway:latest
+    # ports:
+    #   - "9091:9091"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # Visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin     # Set your custom username
+      - GF_SECURITY_ADMIN_PASSWORD=1234 # Set your custom password
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - monitoring
+
+  # Host-level metrics
+  node_exporter:
+    image: prom/node-exporter:latest
+    networks:
+      - monitoring
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    # ports:
+    #   - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+
+  blackbox_exporter:
+    image: prom/blackbox-exporter:latest
+    networks:
+      - monitoring
+    # ports:
+    #   - "9115:9115"
+    command:
+      - '--config.file=/config/blackbox.yml'
+    volumes:
+      - ./conf/blackbox:/config
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ./conf/alertmanager/:/etc/alertmanager/:ro
+    networks:
+      - monitoring
+
+  fastapi:
+    image: python:3.12.7-alpine3.19
+    networks:
+      - monitoring
+    ports:
+      - 8000:8000
+    volumes:
+      - ./fastapi:/app
+    command: sh -c "cd /app && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --workers=5"
+      
+networks:
+  monitoring:
+    driver: bridge

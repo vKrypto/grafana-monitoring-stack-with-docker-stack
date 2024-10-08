@@ -1,0 +1,10 @@
+apiVersion: 1
+datasources:
+  - name: PrometheusDB
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    jsonData:
+      httpMode: GET
+      dbname: prom_metrics_db
+    isDefault: true
