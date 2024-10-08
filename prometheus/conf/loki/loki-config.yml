@@ -1,0 +1,19 @@
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+
+auth_enabled: false
+
+# Define the storage backend
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
+  filesystem:
+    directory: /loki/chunks
+
+# Define the common configurations for log processing
+limits_config:
+  max_entries_limit: 50000
+  max_chunk_age: 1h
+  max_chunk_size: 1048576

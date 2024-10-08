@@ -1,0 +1,173 @@
+version: "3.8"
+
+volumes:
+  prom_data:
+
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    networks:
+      - monitoring_stack
+    devices:
+      - "/dev/kmsg:/dev/kmsg"  # To get kernel logs (optional)
+    privileged: true  # deprecated
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    networks:
+      - monitoring_stack
+    volumes:
+      - ./conf/prometheus/:/etc/prometheus/:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - cadvisor
+      - node_exporter
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  loki:
+    image:  grafana/loki:latest
+    container_name: prometheus
+    networks:
+      - monitoring_stack
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./conf/loki/loki-config.yml:/etc/loki/loki-config.yml
+    depends_on:
+      - prometheus
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    networks:
+      - monitoring_stack
+    depends_on:
+      - prometheus
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  grafana:
+    image: grafana/grafana:latest
+    networks:
+      - monitoring_stack
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin     # Set your custom username
+      - GF_SECURITY_ADMIN_PASSWORD=1234  # Set your custom password
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./conf/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./conf/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    networks:
+      - monitoring_stack
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  blackbox_exporter:
+    image: prom/blackbox-exporter:latest
+    networks:
+      - monitoring_stack
+    volumes:
+      - ./conf/blackbox:/config:ro
+    command:
+      - '--config.file=/config/blackbox.yml'
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    networks:
+      - monitoring_stack
+    volumes:
+      - ./conf/alertmanager/:/etc/alertmanager/:ro
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+  fastapi:
+    image: python:3.12.7-alpine3.19
+    networks:
+      - monitoring_stack
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./fastapi:/app:ro
+    command: sh -c "cd /app && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --workers=5"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # user: "1000:1000"
+    # group_add:
+    #   - "docker"
+
+networks:
+  monitoring_stack:
+    driver: overlay
